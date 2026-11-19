@@ -1,0 +1,6 @@
+{
+  "name": "NameRank",
+  "description": "Insert classmates, friends, or family members and rank their full names across stinkiness, smartness, rizz, and custom traits using a playful linguistic algorithm.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
