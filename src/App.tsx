@@ -24,6 +24,11 @@ import { Podium } from './components/Podium';
 import { QuizArcade } from './components/QuizArcade';
 import { TraitIcon } from './components/TraitIcon';
 import { BUILT_IN_TRAITS, evaluatePerson } from './engine/nameAlgorithm';
+import {
+  fetchMissingTraitInsights,
+  getTraitInsightKey,
+  loadCachedTraitInsights,
+} from './engine/traitInsights';
 import type {
   CustomTraitWeights,
   House,
@@ -32,7 +37,7 @@ import type {
   TraitId,
 } from './types/ranking';
 
-type ActiveView = 'dashboard' | 'house' | 'head-to-head' | 'quiz' | 'algorithm';
+type ActiveView = 'dashboard' | 'house' | 'quiz' | 'algorithm';
 
 const STORAGE_HOUSES_KEY = 'namerank_houses_v3';
 const STORAGE_CUSTOM_TRAITS_KEY = 'namerank_custom_traits_v3';
@@ -82,6 +87,10 @@ export default function App() {
 
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isCustomTraitOpen, setIsCustomTraitOpen] = useState(false);
+  const [showHouseCompare, setShowHouseCompare] = useState(false);
+  const [traitInsights, setTraitInsights] = useState<Record<string, string>>(loadCachedTraitInsights);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -122,19 +131,41 @@ export default function App() {
     [activeHousePeople, allTraits]
   );
 
-  const allEvaluatedAcrossHouses = useMemo(() => {
-    const seen = new Set<string>();
-    const combined: PersonInput[] = [];
-    const source = activeHouse ? activeHouse.people : houses.flatMap((h) => h.people);
-    for (const p of source) {
-      const key = p.fullName.toLowerCase();
-      if (!seen.has(key)) {
-        seen.add(key);
-        combined.push(p);
-      }
-    }
-    return combined.map((p) => evaluatePerson(p, allTraits));
-  }, [activeHouse, houses, allTraits]);
+  useEffect(() => {
+    if (view !== 'house' || evaluatedPeople.length === 0) return;
+
+    const missing = evaluatedPeople.some(
+      (person) => !traitInsights[getTraitInsightKey(person)]
+    );
+    if (!missing) return;
+
+    let cancelled = false;
+    setLoadingInsights(true);
+    setInsightError(null);
+
+    fetchMissingTraitInsights(evaluatedPeople, allTraits, traitInsights)
+      .then((merged) => {
+        if (!cancelled) {
+          setTraitInsights(merged);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setInsightError(
+            err instanceof Error ? err.message : 'Could not load trait insights.'
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingInsights(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, evaluatedPeople, allTraits, traitInsights]);
 
   const filteredAndSorted = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -172,6 +203,7 @@ export default function App() {
     setHouses((prev) => [newHouse, ...prev]);
     setActiveHouseId(id);
     setSelectedPersonId(null);
+    setShowHouseCompare(false);
     setSearchQuery('');
     setInputFeedback(null);
     setView('house');
@@ -180,6 +212,7 @@ export default function App() {
   const handleOpenHouse = (houseId: string) => {
     setActiveHouseId(houseId);
     setSelectedPersonId(null);
+    setShowHouseCompare(false);
     setSearchQuery('');
     setInputFeedback(null);
     setView('house');
@@ -190,6 +223,7 @@ export default function App() {
     if (activeHouseId === houseId) {
       setActiveHouseId(null);
       setSelectedPersonId(null);
+      setShowHouseCompare(false);
       if (view === 'house') setView('dashboard');
     }
   };
@@ -453,18 +487,6 @@ export default function App() {
             )}
             <button
               type="button"
-              onClick={() => setView('head-to-head')}
-              className={`py-1 border-b-2 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                view === 'head-to-head'
-                  ? 'border-[#2563EB] text-[#0F172A]'
-                  : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
-              }`}
-            >
-              <Swords className="w-3.5 h-3.5" aria-hidden="true" />
-              Compare
-            </button>
-            <button
-              type="button"
               onClick={() => setView('quiz')}
               className={`py-1 border-b-2 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 view === 'quiz'
@@ -528,16 +550,6 @@ export default function App() {
           )}
           <button
             type="button"
-            onClick={() => setView('head-to-head')}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap shrink-0 cursor-pointer ${
-              view === 'head-to-head' ? 'bg-white text-[#0F172A] shadow-xs' : 'text-[#475569]'
-            }`}
-          >
-            <Swords className="w-3.5 h-3.5" aria-hidden="true" />
-            Compare
-          </button>
-          <button
-            type="button"
             onClick={() => setView('quiz')}
             className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap shrink-0 cursor-pointer ${
               view === 'quiz' ? 'bg-white text-[#0F172A] shadow-xs' : 'text-[#475569]'
@@ -592,12 +604,27 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 text-xs text-[#64748B] shrink-0">
-                  <Users className="w-4 h-4 text-[#2563EB]" aria-hidden="true" />
-                  <span className="font-mono tabular-nums font-semibold text-[#0F172A]">
-                    {activeHouse.people.length}
-                  </span>
-                  <span>ranked</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="inline-flex items-center gap-1.5 text-xs text-[#64748B]">
+                    <Users className="w-4 h-4 text-[#2563EB]" aria-hidden="true" />
+                    <span className="font-mono tabular-nums font-semibold text-[#0F172A]">
+                      {activeHouse.people.length}
+                    </span>
+                    <span>ranked</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowHouseCompare((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      showHouseCompare
+                        ? 'bg-[#0F172A] text-white border-[#0F172A]'
+                        : 'bg-[#EBF2FA] hover:bg-[#DFEAFA] text-[#0F172A] border-[#D9E4F2]'
+                    }`}
+                  >
+                    <Swords className="w-3.5 h-3.5" aria-hidden="true" />
+                    {showHouseCompare ? 'Back to Rankings' : 'Compare'}
+                  </button>
                 </div>
               </div>
 
@@ -639,126 +666,132 @@ export default function App() {
               )}
             </section>
 
-            <section aria-label="Ranking category selector" className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {allTraits.map((trait) => {
-                    const isActive = trait.id === activeTrait.id;
-                    return (
-                      <div key={trait.id} className="inline-flex items-center">
+            {showHouseCompare ? (
+              <HeadToHead people={evaluatedPeople} allTraits={allTraits} />
+            ) : (
+              <>
+                <section aria-label="Ranking category selector" className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {allTraits.map((trait) => {
+                        const isActive = trait.id === activeTrait.id;
+                        return (
+                          <div key={trait.id} className="inline-flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => setActiveTraitId(trait.id)}
+                              className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                                isActive
+                                  ? 'bg-[#0F172A] text-white border-[#0F172A]'
+                                  : 'bg-white/90 text-[#475569] border-[#D9E4F2] hover:text-[#0F172A] hover:border-[#B9CCE6]'
+                              }`}
+                            >
+                              <TraitIcon
+                                traitId={trait.id}
+                                className="w-3.5 h-3.5 shrink-0"
+                                style={{ color: isActive ? '#FFFFFF' : trait.accentHex }}
+                              />
+                              {trait.name}
+                            </button>
+                            {trait.isCustom && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCustomTrait(trait.id)}
+                                aria-label={`Delete custom trait ${trait.name}`}
+                                className="ml-0.5 p-1.5 text-[#64748B] hover:text-[#DC2626] rounded-md cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomTraitOpen(true)}
+                        className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-[#2563EB] bg-white/90 border border-dashed border-[#2563EB]/45 hover:border-[#2563EB] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                        New Trait
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleCopyLeaderboard}
+                        disabled={filteredAndSorted.length === 0}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#0F172A] bg-white/90 border border-[#D9E4F2] hover:bg-[#EBF2FA] disabled:opacity-40 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        {copiedRanking ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-[#14B8A6]" aria-hidden="true" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-[#475569]" aria-hidden="true" />
+                            Copy
+                          </>
+                        )}
+                      </button>
+
+                      {activeHouse.people.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setActiveTraitId(trait.id)}
-                          className={`inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                            isActive
-                              ? 'bg-[#0F172A] text-white border-[#0F172A]'
-                              : 'bg-white/90 text-[#475569] border-[#D9E4F2] hover:text-[#0F172A] hover:border-[#B9CCE6]'
-                          }`}
+                          onClick={handleClearHouse}
+                          className="px-3 py-2 text-xs font-medium text-[#64748B] hover:text-[#DC2626] bg-white/90 border border-[#D9E4F2] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         >
-                          <TraitIcon
-                            traitId={trait.id}
-                            className="w-3.5 h-3.5 shrink-0"
-                            style={{ color: isActive ? '#FFFFFF' : trait.accentHex }}
-                          />
-                          {trait.name}
+                          Clear
                         </button>
-                        {trait.isCustom && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCustomTrait(trait.id)}
-                            aria-label={`Delete custom trait ${trait.name}`}
-                            className="ml-0.5 p-1.5 text-[#64748B] hover:text-[#DC2626] rounded-md cursor-pointer"
-                          >
-                            <Trash2 className="w-3 h-3" aria-hidden="true" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                      )}
+                    </div>
+                  </div>
+                </section>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomTraitOpen(true)}
-                    className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-[#2563EB] bg-white/90 border border-dashed border-[#2563EB]/45 hover:border-[#2563EB] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                    New Trait
-                  </button>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  <div className="lg:col-span-8 space-y-6">
+                    <Podium
+                      rankedPeople={filteredAndSorted}
+                      activeTrait={activeTrait}
+                      selectedPersonId={inspectedPerson?.id ?? null}
+                      onSelectPerson={(id) => setSelectedPersonId(id)}
+                      sortDescending={sortDescending}
+                    />
+
+                    <LeaderboardTable
+                      people={filteredAndSorted}
+                      activeTrait={activeTrait}
+                      allTraits={allTraits}
+                      traitInsights={traitInsights}
+                      loadingInsights={loadingInsights}
+                      insightError={insightError}
+                      selectedPersonId={inspectedPerson?.id ?? null}
+                      onSelectPerson={(id) => setSelectedPersonId(id)}
+                      onRemovePerson={handleRemovePerson}
+                      onVotePerson={handleVotePerson}
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                      sortDescending={sortDescending}
+                      onToggleSort={() => setSortDescending((prev) => !prev)}
+                    />
+                  </div>
+
+                  <div className="lg:col-span-4">
+                    <PersonInspector
+                      person={inspectedPerson}
+                      activeTrait={activeTrait}
+                      allTraits={allTraits}
+                      onSelectTrait={(traitId) => setActiveTraitId(traitId)}
+                      onVotePerson={handleVotePerson}
+                      onResetVotes={handleResetPersonVotes}
+                    />
+                  </div>
                 </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleCopyLeaderboard}
-                    disabled={filteredAndSorted.length === 0}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#0F172A] bg-white/90 border border-[#D9E4F2] hover:bg-[#EBF2FA] disabled:opacity-40 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    {copiedRanking ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-[#14B8A6]" aria-hidden="true" />
-                        Copied
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5 text-[#475569]" aria-hidden="true" />
-                        Copy
-                      </>
-                    )}
-                  </button>
-
-                  {activeHouse.people.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleClearHouse}
-                      className="px-3 py-2 text-xs font-medium text-[#64748B] hover:text-[#DC2626] bg-white/90 border border-[#D9E4F2] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              <div className="lg:col-span-8 space-y-6">
-                <Podium
-                  rankedPeople={filteredAndSorted}
-                  activeTrait={activeTrait}
-                  selectedPersonId={inspectedPerson?.id ?? null}
-                  onSelectPerson={(id) => setSelectedPersonId(id)}
-                  sortDescending={sortDescending}
-                />
-
-                <LeaderboardTable
-                  people={filteredAndSorted}
-                  activeTrait={activeTrait}
-                  selectedPersonId={inspectedPerson?.id ?? null}
-                  onSelectPerson={(id) => setSelectedPersonId(id)}
-                  onRemovePerson={handleRemovePerson}
-                  onVotePerson={handleVotePerson}
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  sortDescending={sortDescending}
-                  onToggleSort={() => setSortDescending((prev) => !prev)}
-                />
-              </div>
-
-              <div className="lg:col-span-4">
-                <PersonInspector
-                  person={inspectedPerson}
-                  activeTrait={activeTrait}
-                  allTraits={allTraits}
-                  onSelectTrait={(traitId) => setActiveTraitId(traitId)}
-                  onVotePerson={handleVotePerson}
-                  onResetVotes={handleResetPersonVotes}
-                />
-              </div>
-            </div>
+              </>
+            )}
           </>
-        )}
-
-        {view === 'head-to-head' && (
-          <HeadToHead people={allEvaluatedAcrossHouses} allTraits={allTraits} />
         )}
 
         {view === 'quiz' && <QuizArcade />}

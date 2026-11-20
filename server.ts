@@ -25,7 +25,20 @@ interface PersonalityRemarkResult {
   chaosPoints: number;
 }
 
+interface TraitInsightRequestItem {
+  key: string;
+  fullName: string;
+  traitId: string;
+  traitName: string;
+  score: number;
+  verdict: string;
+  doubleLetters: string[];
+  syllableCount: number;
+  letterCount: number;
+}
+
 const personalityRemarkCache = new Map<string, PersonalityRemarkResult>();
+const traitInsightCache = new Map<string, string>();
 
 function fnv1aHash(input: string): number {
   let hash = 0x811c9dc5;
@@ -173,6 +186,89 @@ async function startServer() {
 
       personalityRemarkCache.set(cacheKey, result);
       res.json(result);
+    } catch (err) {
+      const formatted = formatGeminiError(err);
+      res.status(formatted.status).json({ error: formatted.message });
+    }
+  });
+
+  app.post('/api/trait-insights', async (req, res) => {
+    try {
+      const { items } = req.body as { items?: TraitInsightRequestItem[] };
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ error: 'Items array is required.' });
+        return;
+      }
+
+      const limited = items.slice(0, 20);
+      const insights: Record<string, string> = {};
+      const missing: TraitInsightRequestItem[] = [];
+
+      for (const item of limited) {
+        const key = String(item.key ?? '').trim();
+        if (!key) continue;
+        const cached = traitInsightCache.get(key);
+        if (cached) {
+          insights[key] = cached;
+        } else {
+          missing.push(item);
+        }
+      }
+
+      if (missing.length > 0) {
+        const ai = getGeminiClient();
+        const chunkSize = 5;
+
+        for (let i = 0; i < missing.length; i += chunkSize) {
+          const chunk = missing.slice(i, i + chunkSize);
+          const results = await Promise.all(
+            chunk.map(async (item) => {
+              const seed = fnv1aHash(item.key) % 2147483647;
+              const doubles =
+                Array.isArray(item.doubleLetters) && item.doubleLetters.length > 0
+                  ? item.doubleLetters.join(', ')
+                  : 'none';
+              const prompt = `Name: "${item.fullName}" | Top trait: ${item.traitName} (${item.score}/100, "${item.verdict}") | Syllables: ${item.syllableCount} | Letters: ${item.letterCount} | Doubles: ${doubles}`;
+
+              const response = await withRetries(() =>
+                ai.models.generateContent({
+                  model: 'gemini-3.1-flash-lite',
+                  contents: prompt,
+                  config: {
+                    seed,
+                    thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+                    systemInstruction:
+                      'Write one tiny visual badge remark (5 to 9 words max, simple everyday English, no quotes, no emojis) about why this full name fits their highest trait. Mention a fun letter or sound clue like double letters, syllables, or sharp/soft sounds. Return JSON.',
+                    responseMimeType: 'application/json',
+                    responseSchema: {
+                      type: Type.OBJECT,
+                      properties: {
+                        insight: { type: Type.STRING },
+                      },
+                      required: ['insight'],
+                    },
+                  },
+                })
+              );
+
+              const parsed = JSON.parse((response.text ?? '{}').trim()) as {
+                insight?: string;
+              };
+              const text =
+                parsed.insight?.trim() ||
+                `${item.syllableCount} syllables made for ${item.traitName}`;
+              return { key: item.key, text };
+            })
+          );
+
+          for (const entry of results) {
+            traitInsightCache.set(entry.key, entry.text);
+            insights[entry.key] = entry.text;
+          }
+        }
+      }
+
+      res.json({ insights });
     } catch (err) {
       const formatted = formatGeminiError(err);
       res.status(formatted.status).json({ error: formatted.message });

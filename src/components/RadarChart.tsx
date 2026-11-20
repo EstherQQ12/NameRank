@@ -1,8 +1,14 @@
 import type { EvaluatedPerson, TraitDefinition } from '../types/ranking';
 
+export interface RadarSeriesItem {
+  person: EvaluatedPerson;
+  color: string;
+}
+
 interface RadarChartProps {
-  primary: EvaluatedPerson;
+  primary?: EvaluatedPerson;
   secondary?: EvaluatedPerson | null;
+  series?: RadarSeriesItem[];
   traits: TraitDefinition[];
   primaryColor?: string;
   secondaryColor?: string;
@@ -11,6 +17,7 @@ interface RadarChartProps {
 export function RadarChart({
   primary,
   secondary,
+  series,
   traits,
   primaryColor = '#2563EB',
   secondaryColor = '#0EA5E9',
@@ -18,6 +25,16 @@ export function RadarChart({
   const axes = traits.slice(0, 8);
   const count = axes.length;
   if (count < 3) return null;
+
+  const activeSeries: RadarSeriesItem[] =
+    series && series.length > 0
+      ? series
+      : [
+          ...(primary ? [{ person: primary, color: primaryColor }] : []),
+          ...(secondary ? [{ person: secondary, color: secondaryColor }] : []),
+        ];
+
+  if (activeSeries.length === 0) return null;
 
   const size = 280;
   const center = size / 2;
@@ -42,13 +59,15 @@ export function RadarChart({
       })
       .join(' ');
 
+  const fillOpacity = activeSeries.length > 2 ? 0.1 : 0.16;
+
   return (
     <div className="w-full flex flex-col items-center">
       <svg
         viewBox={`0 0 ${size} ${size}`}
         className="w-full max-w-[270px] h-auto overflow-visible"
         role="img"
-        aria-label={`Trait profile radar chart for ${primary.fullName}`}
+        aria-label={`Trait profile radar chart for ${activeSeries.map((s) => s.person.fullName).join(', ')}`}
       >
         {levels.map((level) => {
           const ringPoints = axes
@@ -102,56 +121,34 @@ export function RadarChart({
           );
         })}
 
-        {secondary && (
+        {[...activeSeries].reverse().map((item) => (
           <polygon
-            points={buildPolygon(secondary)}
-            fill={secondaryColor}
-            fillOpacity={0.16}
-            stroke={secondaryColor}
+            key={`poly-${item.person.id}`}
+            points={buildPolygon(item.person)}
+            fill={item.color}
+            fillOpacity={fillOpacity}
+            stroke={item.color}
             strokeWidth={2}
             strokeLinejoin="round"
           />
-        )}
+        ))}
 
-        <polygon
-          points={buildPolygon(primary)}
-          fill={primaryColor}
-          fillOpacity={0.18}
-          stroke={primaryColor}
-          strokeWidth={2.2}
-          strokeLinejoin="round"
-        />
-
-        {axes.map((trait, idx) => {
-          const pt = getPoint(idx, primary.scores[trait.id]?.score ?? 0);
-          return (
-            <circle
-              key={`dot-${trait.id}`}
-              cx={pt.x}
-              cy={pt.y}
-              r={3}
-              fill={primaryColor}
-              stroke="#FFFFFF"
-              strokeWidth={1.2}
-            />
-          );
-        })}
-
-        {secondary &&
+        {activeSeries.map((item) =>
           axes.map((trait, idx) => {
-            const pt = getPoint(idx, secondary.scores[trait.id]?.score ?? 0);
+            const pt = getPoint(idx, item.person.scores[trait.id]?.score ?? 0);
             return (
               <circle
-                key={`dot2-${trait.id}`}
+                key={`dot-${item.person.id}-${trait.id}`}
                 cx={pt.x}
                 cy={pt.y}
                 r={2.8}
-                fill={secondaryColor}
+                fill={item.color}
                 stroke="#FFFFFF"
-                strokeWidth={1.2}
+                strokeWidth={1.1}
               />
             );
-          })}
+          })
+        )}
       </svg>
     </div>
   );

@@ -1,10 +1,15 @@
-import { ArrowDown, ArrowDownUp, ArrowUp, Search, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowDownUp, ArrowUp, Loader2, Search, Trash2 } from 'lucide-react';
+import { getTraitInsightKey } from '../engine/traitInsights';
 import type { EvaluatedPerson, TraitDefinition } from '../types/ranking';
 import { TraitIcon } from './TraitIcon';
 
 interface LeaderboardTableProps {
   people: EvaluatedPerson[];
   activeTrait: TraitDefinition;
+  allTraits: TraitDefinition[];
+  traitInsights: Record<string, string>;
+  loadingInsights: boolean;
+  insightError: string | null;
   selectedPersonId: string | null;
   onSelectPerson: (id: string) => void;
   onRemovePerson: (id: string) => void;
@@ -18,6 +23,10 @@ interface LeaderboardTableProps {
 export function LeaderboardTable({
   people,
   activeTrait,
+  allTraits,
+  traitInsights,
+  loadingInsights,
+  insightError,
   selectedPersonId,
   onSelectPerson,
   onRemovePerson,
@@ -86,6 +95,9 @@ export function LeaderboardTable({
             const upVotes = detail?.upVotes ?? 0;
             const downVotes = detail?.downVotes ?? 0;
             const isSelected = person.id === selectedPersonId;
+            const bestTrait = allTraits.find((t) => t.id === person.bestTraitId) ?? activeTrait;
+            const insightKey = getTraitInsightKey(person);
+            const insightText = traitInsights[insightKey];
 
             return (
               <div
@@ -114,6 +126,40 @@ export function LeaderboardTable({
                       <span aria-hidden="true">·</span>
                       <span className="truncate">{detail?.verdict}</span>
                     </div>
+
+                    {bestTrait && (
+                      <div
+                        className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] leading-snug max-w-full"
+                        style={{
+                          backgroundColor: `${bestTrait.accentHex}10`,
+                          borderColor: `${bestTrait.accentHex}30`,
+                        }}
+                      >
+                        <TraitIcon
+                          traitId={bestTrait.id}
+                          className="w-3 h-3 shrink-0"
+                          style={{ color: bestTrait.accentHex }}
+                        />
+                        <span
+                          className="font-semibold shrink-0"
+                          style={{ color: bestTrait.accentHex }}
+                        >
+                          Trait Insight · {bestTrait.shortLabel}:
+                        </span>
+                        {insightText ? (
+                          <span className="text-[#0F172A] truncate">{insightText}</span>
+                        ) : loadingInsights ? (
+                          <span className="inline-flex items-center gap-1 text-[#64748B]">
+                            <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+                            Reading...
+                          </span>
+                        ) : insightError ? (
+                          <span className="text-[#B91C1C] truncate">{insightError}</span>
+                        ) : (
+                          <span className="text-[#64748B]">Waiting for insight...</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </button>
 
