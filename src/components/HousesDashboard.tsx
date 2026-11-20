@@ -1,4 +1,4 @@
-import { ArrowRight, Brain, Home, Plus, Trash2, Users, Wind } from 'lucide-react';
+import { ArrowRight, Brain, Dices, Home, Plus, Trash2, Users, Wind } from 'lucide-react';
 import { useState } from 'react';
 import { evaluatePerson } from '../engine/nameAlgorithm';
 import type { House, TraitDefinition } from '../types/ranking';
@@ -9,6 +9,7 @@ interface HousesDashboardProps {
   onCreateHouse: (name: string) => void;
   onOpenHouse: (houseId: string) => void;
   onDeleteHouse: (houseId: string) => void;
+  onOpenQuiz: () => void;
 }
 
 export function HousesDashboard({
@@ -17,6 +18,7 @@ export function HousesDashboard({
   onCreateHouse,
   onOpenHouse,
   onDeleteHouse,
+  onOpenQuiz,
 }: HousesDashboardProps) {
   const [houseName, setHouseName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -45,18 +47,29 @@ export function HousesDashboard({
         aria-label="Create a new house"
         className="bg-white/90 backdrop-blur-sm border border-[#D9E4F2] rounded-xl p-6"
       >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-[#EBF2FA] border border-[#D9E4F2] flex items-center justify-center shrink-0">
-            <Home className="w-5 h-5 text-[#2563EB]" aria-hidden="true" />
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#EBF2FA] border border-[#D9E4F2] flex items-center justify-center shrink-0">
+              <Home className="w-5 h-5 text-[#2563EB]" aria-hidden="true" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
+                Houses
+              </h1>
+              <p className="text-xs text-[#64748B]">
+                Create a house and rank any group of names.
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[#0F172A]">
-              Houses
-            </h1>
-            <p className="text-xs text-[#64748B]">
-              Create a house and rank any group of names.
-            </p>
-          </div>
+
+          <button
+            type="button"
+            onClick={onOpenQuiz}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#2563EB] bg-[#EBF2FA] hover:bg-[#DFEAFA] border border-[#D9E4F2] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            <Dices className="w-4 h-4" aria-hidden="true" />
+            Take a Random Quiz
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2.5 max-w-2xl">

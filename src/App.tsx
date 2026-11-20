@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Check,
   Copy,
+  Dices,
   Home,
   LayoutGrid,
   Plus,
@@ -20,6 +21,7 @@ import { HousesDashboard } from './components/HousesDashboard';
 import { LeaderboardTable } from './components/LeaderboardTable';
 import { PersonInspector } from './components/PersonInspector';
 import { Podium } from './components/Podium';
+import { QuizArcade } from './components/QuizArcade';
 import { TraitIcon } from './components/TraitIcon';
 import { BUILT_IN_TRAITS, evaluatePerson } from './engine/nameAlgorithm';
 import type {
@@ -30,7 +32,7 @@ import type {
   TraitId,
 } from './types/ranking';
 
-type ActiveView = 'dashboard' | 'house' | 'head-to-head' | 'algorithm';
+type ActiveView = 'dashboard' | 'house' | 'head-to-head' | 'quiz' | 'algorithm';
 
 const STORAGE_HOUSES_KEY = 'namerank_houses_v3';
 const STORAGE_CUSTOM_TRAITS_KEY = 'namerank_custom_traits_v3';
@@ -463,6 +465,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              onClick={() => setView('quiz')}
+              className={`py-1 border-b-2 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                view === 'quiz'
+                  ? 'border-[#2563EB] text-[#0F172A]'
+                  : 'border-transparent text-[#64748B] hover:text-[#0F172A]'
+              }`}
+            >
+              <Dices className="w-3.5 h-3.5" aria-hidden="true" />
+              Random Quiz
+            </button>
+            <button
+              type="button"
               onClick={() => setView('algorithm')}
               className={`py-1 border-b-2 inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 view === 'algorithm'
@@ -524,6 +538,16 @@ export default function App() {
           </button>
           <button
             type="button"
+            onClick={() => setView('quiz')}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap shrink-0 cursor-pointer ${
+              view === 'quiz' ? 'bg-white text-[#0F172A] shadow-xs' : 'text-[#475569]'
+            }`}
+          >
+            <Dices className="w-3.5 h-3.5" aria-hidden="true" />
+            Random Quiz
+          </button>
+          <button
+            type="button"
             onClick={() => setView('algorithm')}
             className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md whitespace-nowrap shrink-0 cursor-pointer ${
               view === 'algorithm' ? 'bg-white text-[#0F172A] shadow-xs' : 'text-[#475569]'
@@ -541,6 +565,7 @@ export default function App() {
             onCreateHouse={handleCreateHouse}
             onOpenHouse={handleOpenHouse}
             onDeleteHouse={handleDeleteHouse}
+            onOpenQuiz={() => setView('quiz')}
           />
         )}
 
@@ -735,6 +760,8 @@ export default function App() {
         {view === 'head-to-head' && (
           <HeadToHead people={allEvaluatedAcrossHouses} allTraits={allTraits} />
         )}
+
+        {view === 'quiz' && <QuizArcade />}
 
         {view === 'algorithm' && <AlgorithmGuide allTraits={allTraits} />}
       </main>
