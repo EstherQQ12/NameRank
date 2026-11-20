@@ -57,7 +57,7 @@ export function CustomTraitModal({ isOpen, onClose, onCreateTrait }: CustomTrait
               Create Custom Ranking Trait
             </h2>
             <p className="text-xs text-[#64748B] mt-0.5">
-              Make up any funny category and adjust how names are scored.
+              Make up any custom category and adjust how names are scored.
             </p>
           </div>
           <button

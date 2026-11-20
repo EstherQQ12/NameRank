@@ -373,7 +373,7 @@ function scoreChaos(anatomy: NameAnatomy): RawTraitScoreDetail {
     [
       [88, ['Total Menace', 'Pure Chaos', 'Drama Starter', 'Wildcard Boss']],
       [72, ['Trouble Magnet', 'Impulse Pick', 'Plot Twist', 'Wild Spark']],
-      [54, ['Little Gremlin', 'Cheeky Card', 'Sneaky Funny', 'Bit Wild']],
+      [54, ['Little Gremlin', 'Cheeky Card', 'Sneaky Move', 'Bit Wild']],
       [35, ['Mostly Chill', 'Tame Trouble', 'Calm Secrets', 'Rarely Wild']],
       [0, ['Super Calm', 'Follows Rules', 'Always Ready', 'Zero Drama']],
     ],
